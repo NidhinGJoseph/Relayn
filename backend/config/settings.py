@@ -29,12 +29,17 @@ if not DATABASES["default"].get("NAME") or not DATABASES["default"].get("HOST"):
     raise ImproperlyConfigured("DATABASE_URL must include an explicit database name and host")
 DATABASES["default"].setdefault("OPTIONS", {}).setdefault("connect_timeout", 5)
 DATABASES["default"]["CONN_MAX_AGE"] = 60
+DATABASES["default"]["TEST"] = {"NAME": "test_relayn"}
+if DATABASES["default"]["NAME"] == "test_relayn":
+    raise ImproperlyConfigured("DATABASE_URL must not point to the dedicated test database")
+TEST_RUNNER = "config.test_runner.ProvisionedDatabaseRunner"
 REDIS_URL = env("REDIS_URL")
 if urlsplit(REDIS_URL).scheme not in {"redis", "rediss"} or not urlsplit(REDIS_URL).hostname:
     raise ImproperlyConfigured("REDIS_URL must be a valid redis:// or rediss:// URL")
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "core.apps.CoreConfig",
     "rest_framework",
     "corsheaders",
 ]
@@ -50,11 +55,12 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 USE_TZ = True
 TIME_ZONE = "UTC"
+AUTH_USER_MODEL = "core.User"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_URLS_REGEX = r"^/api/.*$"
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.BasicAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,

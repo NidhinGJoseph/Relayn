@@ -12,7 +12,7 @@ dependencies = ["Django>=5.2.17,<5.3", "djangorestframework>=3.16,<4", "django-c
 dev = ["ruff>=0.11,<1"]
 
 [tool.setuptools.packages.find]
-include = ["config*", "infrastructure*"]
+include = ["config*", "infrastructure*", "core*"]
 
 [tool.ruff]
 target-version = "py311"

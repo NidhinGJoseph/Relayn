@@ -1,6 +1,7 @@
 # Relayn
 
-Stage 0 modular-monolith foundation. No product features or tenant data models.
+Stage 0 infrastructure and Stage 1 identity, membership and tenant authorization.
+Stage 1 migrations and PostgreSQL integration validation are complete.
 Read AGENTS.md, ENGINEERING.md, and ARCHITECTURE.md before changes.
 
 ## Backend
@@ -21,7 +22,7 @@ configuration. From `backend/`:
 
 ```powershell
 .venv/Scripts/python manage.py check
-.venv/Scripts/python manage.py test
+.venv/Scripts/python manage.py test --keepdb
 .venv/Scripts/ruff check .
 .venv/Scripts/ruff format --check .
 .venv/Scripts/python manage.py makemigrations --check --dry-run
@@ -29,8 +30,9 @@ configuration. From `backend/`:
 .venv/Scripts/python manage.py runserver
 ```
 
-Review Django's built-in auth/contenttypes migrations and their plan before
-running `migrate`; no application migrations exist. Production must set
+Review `core.0001_initial` and Django auth/contenttypes migrations and their plan
+before running `migrate`. The Stage 1 graph was approved and applied locally;
+see STAGE1_REPORT.md for results. Production must set
 DJANGO_ENV=production, DEBUG=false, a strong unique secret (50+ characters),
 explicit allowed hosts, DATABASE_URL and REDIS_URL. Run `check --deploy` before
 deploying. Missing settings fail at startup; unreachable services return 503
@@ -109,3 +111,54 @@ After provisioning, validate with the real configuration (no example URL overrid
 .venv/Scripts/python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('PostgreSQL connected')"
 .venv/Scripts/python manage.py shell -c "from django.conf import settings; from redis import Redis; client = Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2); print('Redis PING:', client.ping()); client.close()"
 ```
+
+## Stage 1 API and provisioning
+
+All identity endpoints require Django credentials through HTTP Basic authentication.
+Use HTTPS in production. No registration, invitation, login UI, or token service
+exists. The reviewed Stage 1 migrations have been applied locally; operators
+can provision accounts and organizations through the documented services.
+
+| Method | Path under `/api/v1/` | Behavior |
+| --- | --- | --- |
+| GET | users/me/ | Current UUID and username |
+| GET | organizations/ | Paginated organizations belonging to the actor |
+| GET | organizations/<organization UUID>/ | Authorized organization details |
+| GET | organizations/<organization UUID>/members/ | Paginated scoped memberships |
+| POST | organizations/<organization UUID>/members/ | Add known active account |
+| PATCH | organizations/<organization UUID>/members/<membership UUID>/ | Change role |
+| DELETE | organizations/<organization UUID>/members/<membership UUID>/ | Remove member |
+
+POST body: `{"user_id": "<account UUID>", "role": "AGENT"}`.
+PATCH body: `{"role": "MANAGER"}`. Roles are OWNER, ADMIN, MANAGER, AGENT.
+The role/capability and authority matrix is in ARCHITECTURE.md. No tenant context
+is inferred; always supply the organization UUID in the path.
+
+Operators can provision accounts with
+`get_user_model().objects.create_user(...)` and organizations with
+`core.services.create_organization(owner=user, name="...")` in Django shell.
+Supply passwords interactively; never put real credentials into shell history.
+All membership mutations must use core.services; raw ORM writes bypass the
+transactional ownership policy. Do not register writable membership admin views
+that bypass these services.
+
+The complete backend suite is `.venv/Scripts/python manage.py test --keepdb`
+from backend. It includes real PostgreSQL integration and concurrent ownership
+tests. Django is explicitly configured to use `test_relayn`, separate from
+`relayn`; the application role remains NOCREATEDB. The test runner requires
+`--keepdb` and prior provisioning, and refuses unsafe database names.
+
+Provision the dedicated database from the repository root using the existing
+Compose bootstrap administrator (password read inside the container):
+
+```powershell
+backend/.venv/Scripts/python scripts/provision_test_database.py
+```
+
+If Docker is not on PATH, pass `--docker` with its executable path. The script
+creates only `test_relayn`, owned by relayn, revokes PUBLIC database access,
+verifies ownership and least privilege, and safely reuses an existing database.
+It normalizes shell line endings and never prints administrator credentials.
+It does not grant database creation privileges, reset data, or drop databases.
+`--keepdb` preserves the test schema; test fixtures are rolled back/flushed only
+inside the dedicated test database. Do not store development data there.
