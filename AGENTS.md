@@ -20,11 +20,9 @@ repository. These instructions apply to all repository work.
 Implement only capabilities authorized by the current task and keep changes
 within the requested stage.
 
-The repository currently contains instructions only. Stage 0 application
-scaffolding has NOT been completed. Do not create backend/ or frontend/, install
-dependencies, initialize frameworks, create models or Docker infrastructure, or
-implement authentication, WhatsApp, billing, or AI until a later task authorizes
-that work. Conceptual domains are not instructions to scaffold every module.
+Stage 0 scaffolding is authorized and implemented. Do not implement product
+features, authentication, provider integrations, or speculative domain models
+until a later task explicitly authorizes them.
 
 ## Completion reporting
 

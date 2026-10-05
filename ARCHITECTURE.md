@@ -14,7 +14,7 @@ between domains. Do not introduce premature microservices.
 
 The intended backend uses Python, Django, Django REST Framework, PostgreSQL,
 Redis, and Celery. The intended frontend uses React, TypeScript, Vite, and
-Tailwind CSS. These are directions, not installed or initialized components.
+Tailwind CSS. Stage 0 initializes these stacks without product capabilities.
 
 ## Conceptual domain boundaries
 
@@ -72,5 +72,33 @@ data. Secrets belong in appropriate configuration, never source control or logs.
 ## Staged implementation
 
 This document records intended boundaries, not implemented functionality.
-Stage 0 application scaffolding has NOT been completed. Each later stage should
+Stage 0 contains configuration, infrastructure health checks, and a minimal
+frontend shell. Each later stage should
 implement only its agreed scope and satisfy the AGENTS.md definition of done.
+
+## Stage 0 structure
+
+`backend/config` owns environment settings and process entry points.
+`backend/infrastructure` owns dependency probes and structured logging; it must
+not contain product logic. `frontend/src/api` owns HTTP transport, while React
+components own presentation. PostgreSQL is the only persistence backend. Redis
+is required infrastructure and the Celery broker; no tasks or result backend are
+configured. Health endpoints are public and return no configuration details.
+
+DRF denies anonymous access by default. Authentication and organization context
+are intentionally deferred; no tenant-owned resources exist yet. Future product
+endpoints must establish verified organization membership before querying data.
+No product module, adapter interface, event bus, or tenant model is scaffolded.
+JSON logs allowlist contextual fields; callers must never log secrets or message
+content. Production uses HTTPS and explicit hosts; reverse-proxy trust must be
+configured deliberately during deployment, never by blindly trusting headers.
+
+## Local Stage 0 infrastructure
+
+Root Compose runs only PostgreSQL 16 and Redis 7.4; Django/React remain host-run.
+The application database identity is a non-superuser owning the relayn database,
+separate from the initialization administrator. Secret files and backend/.env are
+ignored. Services publish only loopback ports 5433/6380 with password authentication.
+Named volumes preserve PostgreSQL and Redis AOF broker data. Init scripts never
+reset an existing volume. This is development infrastructure; production TLS and
+secret distribution remain deployment responsibilities.
