@@ -163,3 +163,70 @@ uses the existing Compose bootstrap administrator via the reproducible scripts,
 without elevating relayn. TEST.NAME is fixed to test_relayn; the test runner
 requires prior provisioning and --keepdb, and rejects application/test database
 name collisions. See STAGE1_REPORT.md for schema and validation evidence.
+
+## Stage 2 organization entitlements
+
+`billing` owns entitlement persistence and its service interface, independent of
+pricing. Definitions in billing.definitions contain only capability and limit
+keys. OrganizationEntitlement stores one explicit assignment per organization/key.
+Database checks enforce known keys, boolean-only capability values, and nonnegative
+integer-only limits. There are no default grants, plan tiers, prices, subscriptions,
+payment operations, or product implementations.
+
+Business code reads only through billing.services.has_capability, get_limit, and
+require_capability. Missing/disabled capabilities deny access; require_capability
+raises CapabilityUnavailable (DRF 403, code capability_unavailable). A missing limit
+returns None (unassigned, never unlimited); zero is an explicit zero allocation.
+Unknown or wrong-kind keys raise ValueError. No usage counting or quota enforcement
+is implemented: later resource operations must explicitly enforce assigned limits.
+
+Request callers must resolve authorized organization membership through core.tenancy
+before calling these services. The services accept persisted Organization objects,
+not client-supplied UUIDs, and scope every query to that organization. Possessing
+an Organization object is not itself authorization. Existing core.policy member
+permissions remain independent; product access requires both applicable member
+permission and organization entitlement. Staff/owner status grants no entitlement.
+
+set_capability and set_limit are trusted internal/operator assignment services for
+Django shell use, with explicit type validation and atomic organization/key upserts.
+No assignment endpoint or tenant-accessible admin interface exists. Future tenant
+endpoints must not expose these operator services. ORM/SQL writes bypass service
+validation but remain subject to the database's uniqueness and typed-value checks.
+Adding a new key requires updating definitions and migrating the database check.
+
+## Stage 3 channel abstraction
+
+`channels` owns Channel and organization-owned ChannelAccount. WHATSAPP is the
+only enabled channel code. Adding INSTAGRAM, MESSENGER or WEBCHAT requires extending
+the channel catalog constraint/choices and registering a real supporting adapter;
+future communication models reference ChannelAccount without transport-specific
+fields. Operators create catalog rows and accounts through Django shell. No tenant
+account administration or sending endpoint is provided at this stage.
+
+Account status is INACTIVE (default), ACTIVE or DISABLED, protected by a database
+check. ACTIVE means operator-enabled, not verified provider connectivity. Accounts
+may exist without a provider; sending then raises ProviderNotConfigured. Unknown
+providers and unsupported channel/provider pairs raise separate explicit failures.
+There are no installed providers, Meta integration, fake adapters or fallbacks.
+
+ProviderAdapter defines configuration validation, plain-text sending and inbound
+text normalization with neutral input/output types. Provider envelopes, addressing
+translation and credentials stay behind this boundary. No webhook ingress, message
+persistence, retries, delivery guarantees or production sending workflow is added.
+The internal send seam verifies current active-user membership and scopes account
+lookup by organization before checking status or resolving transport. Future product
+entry points must add send-specific role permissions and entitlements; membership
+alone does not define the eventual product authorization policy.
+
+Deployment-owned JSON configuration lives at
+`CHANNEL_SECRETS_DIR/<organization UUID>/<account UUID>.json`. The setting must be
+an absolute directory; missing/unreadable/invalid files fail explicitly. No provider
+configuration, secret values or arbitrary secret paths are stored in generic
+models. The loader is trusted internal code, invoked only after tenant-scoped
+resolution by the send service, and returns sensitive mappings only to adapters.
+Adapters validate their own configuration schema; provider changes require operators
+to replace the corresponding file. Errors never echo file contents. Filesystem ACLs,
+backups, rotation and distribution are operator responsibilities. This is a mounted
+secret-file boundary for the current host-run architecture, not application-level
+encryption or a secrets manager. Production can mount files from its secret store;
+a future store implementation can replace the loader without changing core models.

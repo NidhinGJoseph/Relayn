@@ -162,3 +162,59 @@ It normalizes shell line endings and never prints administrator credentials.
 It does not grant database creation privileges, reset data, or drop databases.
 `--keepdb` preserves the test schema; test fixtures are rolled back/flushed only
 inside the dedicated test database. Do not store development data there.
+
+## Stage 2 entitlements
+
+Use `billing.services` for organization capability and limit decisions; pricing
+and member-role permissions are separate. Missing/disabled capabilities deny
+access. Missing limits return `None`, not an unlimited allocation. Numeric limits
+are stored allocations; resource usage enforcement belongs to later stages.
+
+Trusted operators can assign entitlements from `python manage.py shell` in backend
+after applying the reviewed migrations:
+
+```python
+from core.models import Organization
+from billing.definitions import Capability, Limit
+from billing.services import (
+    set_capability, set_limit, has_capability, get_limit, require_capability,
+)
+
+organization = Organization.objects.get(pk="<known organization UUID>")
+set_capability(organization, Capability.SHARED_INBOX, enabled=True)
+set_limit(organization, Limit.AGENT_LIMIT, value=5)
+set_limit(organization, Limit.WHATSAPP_NUMBER_LIMIT, value=1)
+require_capability(organization, Capability.SHARED_INBOX)
+set_capability(organization, Capability.SHARED_INBOX, enabled=False)
+```
+
+Assignment functions are operator-only and must not be exposed to tenant clients.
+Request code must first resolve the actor's membership through `core.tenancy`,
+then pass the authorized organization to the read services. No public entitlement
+API, default grants, plan definitions, payment processing, or product features exist.
+
+## Stage 3 channels
+
+`channels.models` provides Channel (currently WHATSAPP) and organization-owned
+ChannelAccount. Operators can create the channel with
+`Channel.objects.get_or_create(code=Channel.Type.WHATSAPP)` and create accounts
+through Django shell. Accounts default to INACTIVE. Only ACTIVE accounts are
+eligible for transport dispatch; active status does not certify connectivity.
+There is no account-management API or Meta adapter yet.
+
+`channels.providers.ProviderAdapter` is the transport contract. Its code-owned
+registry is deliberately empty: no configured provider raises ProviderNotConfigured;
+`meta` currently raises UnsupportedProvider. No fallback or simulated send exists.
+The internal `channels.services.send_message` seam verifies membership and tenant
+scope. Future product endpoints must also enforce send permissions/entitlements.
+
+Provider configuration and credentials belong in deployment-owned files, never
+ChannelAccount fields. Set `CHANNEL_SECRETS_DIR` to an absolute directory outside
+the checkout, containing `<organization UUID>/<account UUID>.json`. Only operators
+and the application identity should have filesystem access. Keep all configuration
+files, backups and secrets out of Git and restrict backup access. `channel-secrets/`
+directories are additionally ignored. No sample credentials or default files ship.
+Adapters will define/validate file contents; do not provision Meta configuration yet.
+Rotation replaces the file atomically; dispatch reads it anew for each operation.
+Do not log or return configuration mappings. The application does not encrypt files;
+deployment supplies access controls and any at-rest encryption/secret-store mounts.

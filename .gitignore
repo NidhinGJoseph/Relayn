@@ -41,6 +41,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Environment configuration (retain example templates)
+channel-secrets/
 .env
 .env.*
 !.env.example
