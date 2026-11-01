@@ -230,3 +230,49 @@ backups, rotation and distribution are operator responsibilities. This is a moun
 secret-file boundary for the current host-run architecture, not application-level
 encryption or a secrets manager. Production can mount files from its secret store;
 a future store implementation can replace the loader without changing core models.
+
+
+## Stage 4 contacts and communication persistence
+
+`communications` owns minimal Contact/ContactIdentity, Conversation and Message
+models. Contacts are identity containers, without CRM behavior. Identity matching
+uses (organization, channel account, opaque external identity); adapters must
+supply normalized identifiers. No phone field globally identifies a person.
+Explicit trusted linking can attach another identity to an existing tenant contact;
+there is no automatic merge based on phone, email or display name.
+
+A conversation belongs to one identity, hence one channel account and contact.
+One durable conversation is reused for that identity. Group participants and agent
+assignment are not implemented, so no participant table is needed. New inbound
+messages do not implicitly reopen a resolved conversation. Explicit transitions:
+OPEN -> PENDING/RESOLVED, PENDING -> OPEN/RESOLVED, RESOLVED -> OPEN; repeats are no-ops.
+
+Inbound text is RECEIVED. Outbound records start QUEUED; this does not dispatch.
+Delivery progresses QUEUED -> SENT -> DELIVERED -> READ, allowing forward skips
+and ignoring late lower-rank events. QUEUED/SENT may become terminal FAILED;
+DELIVERED/READ cannot fail. Retrying a failed send requires a new outbound request.
+External IDs may be bound once through the delivery service and cannot change.
+`occurred_at` records message time; `status_at` records the latest accepted state
+change without moving backward; created/updated timestamps record persistence.
+Metadata is supplemental JSON, excluded from inbox responses to avoid exposing
+provider payloads. Text, direction, IDs, status and timestamps are explicit fields.
+
+Supported writes use atomic services and a shared organization row lock. Services
+validate every referenced tenant object. Database checks protect state/type values;
+unique constraints protect identity matching, conversation reuse, account-scoped
+external message IDs (both directions), and tenant-scoped outbound UUID keys.
+Conflicting reuse raises an explicit validation error. Cross-row tenant consistency
+and transition history are service invariants: direct ORM/SQL writes are unsupported
+and can bypass these checks. Organization locking serializes writes per tenant;
+revisit lock granularity if measured contention warrants it.
+
+Persistence services are trusted internal boundaries accepting an authorized
+persisted Organization. They do not authorize an arbitrary caller by themselves.
+REST access resolves active membership and requires SHARED_INBOX entitlement;
+all four existing membership roles can read and change conversation status.
+There is no staff bypass. Status writes recheck membership after the parent lock.
+Endpoints under /api/v1/organizations/<uuid>/conversations/ provide paginated GET
+lists, GET/PATCH <conversation uuid>/ and paginated GET <conversation uuid>/messages/.
+Messages sort ascending by occurred_at, created_at, then UUID for stable ties.
+No public contact creation, message sending, webhook ingress, Meta adapter,
+automation, CRM workflow or AI is implemented.
