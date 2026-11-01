@@ -1,0 +1,49 @@
+name: relayn
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: relayn_admin
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets:
+      - postgres_admin_password
+      - postgres_app_password
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/initialize.sh:/docker-entrypoint-initdb.d/10-relayn.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=$$(cat /run/secrets/postgres_app_password) psql -h 127.0.0.1 -U relayn -d relayn -Atqc 'SELECT 1' | grep -qx 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+  redis:
+    image: redis:7.4-alpine
+    command: ["sh", "/usr/local/bin/start-redis.sh"]
+    secrets:
+      - redis_password
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redis_data:/data
+      - ./infrastructure/redis/start.sh:/usr/local/bin/start-redis.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli ping | grep -qx PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+secrets:
+  postgres_admin_password:
+    file: ./backend/.env.postgres-admin-password
+  postgres_app_password:
+    file: ./backend/.env.postgres-app-password
+  redis_password:
+    file: ./backend/.env.redis-password
+volumes:
+  postgres_data:
+  redis_data:
