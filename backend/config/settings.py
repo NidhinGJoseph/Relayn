@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "billing",
     "channels",
+    "communications",
     "rest_framework",
     "corsheaders",
 ]
