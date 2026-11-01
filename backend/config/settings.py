@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "core.apps.CoreConfig",
+    "billing",
+    "channels",
     "rest_framework",
     "corsheaders",
 ]
@@ -57,6 +59,7 @@ USE_TZ = True
 TIME_ZONE = "UTC"
 AUTH_USER_MODEL = "core.User"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+CHANNEL_SECRETS_DIR = env("CHANNEL_SECRETS_DIR", default="")
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_URLS_REGEX = r"^/api/.*$"
 REST_FRAMEWORK = {
